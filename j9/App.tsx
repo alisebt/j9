@@ -4,6 +4,18 @@ import PromptViewer from './components/JsonViewer';
 import ShotCard from './components/ShotCard';
 import TagEditor from './components/TagEditor';
 import ExportModal from './components/ExportModal';
+import {
+  fetchPlaylists,
+  fetchTags,
+  createPlaylist as apiCreatePlaylist,
+  deletePlaylist as apiDeletePlaylist,
+  renamePlaylist as apiRenamePlaylist,
+  addShotToPlaylist,
+  removeShotFromPlaylist,
+  addTag as apiAddTag,
+  removeTag as apiRemoveTag,
+  renameTag as apiRenameTag
+} from './api';
 
 // Augment React's HTMLAttributes to include non-standard directory attributes
 declare module 'react' {
@@ -52,8 +64,8 @@ const App: React.FC = () => {
   const [shots, setShots] = useState<Shot[]>([]);
   const [selectedShot, setSelectedShot] = useState<Shot | null>(null);
   
-  const [playlists, setPlaylists] = useState<Playlists>(() => loadFromStorage('j9_playlists', {}));
-  const [tags, setTags] = useState<Tags>(() => loadFromStorage('j9_tags', {}));
+  const [playlists, setPlaylists] = useState<Playlists>({});
+  const [tags, setTags] = useState<Tags>({});
   const [shotCovers, setShotCovers] = useState<ShotCovers>(() => loadFromStorage('j9_shotCovers', {}));
   const [activePlaylistName, setActivePlaylistName] = useState<string | null>(() => loadFromStorage('j9_activePlaylistName', null));
   const [isSidebarOpen, setIsSidebarOpen] = useState<boolean>(() => loadFromStorage('j9_isSidebarOpen', true));
@@ -69,6 +81,18 @@ const App: React.FC = () => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const importPlaylistsInputRef = useRef<HTMLInputElement>(null);
   const importTagsInputRef = useRef<HTMLInputElement>(null);
+
+  useEffect(() => {
+    (async () => {
+      try {
+        const [pl, tg] = await Promise.all([fetchPlaylists(), fetchTags()]);
+        setPlaylists(pl);
+        setTags(tg);
+      } catch (err) {
+        console.error(err);
+      }
+    })();
+  }, []);
 
   // Effect for saving state to localStorage
   useEffect(() => {
@@ -230,26 +254,33 @@ const App: React.FC = () => {
     return playlists[activePlaylistName]?.includes(shotId) ?? false;
   }, [activePlaylistName, playlists]);
 
-  const handleTogglePlaylist = useCallback((shotId: string) => {
+  const handleTogglePlaylist = useCallback(async (shotId: string) => {
     if (!activePlaylistName) {
         alert("لطفاً ابتدا یک لیست پخش را انتخاب یا ایجاد کنید.");
         return;
     }
+    const currentList = playlists[activePlaylistName] ?? [];
+    if (currentList.includes(shotId)) {
+      await removeShotFromPlaylist(activePlaylistName, shotId);
+    } else {
+      await addShotToPlaylist(activePlaylistName, shotId);
+    }
     setPlaylists(prev => {
-        const currentList = prev[activePlaylistName] ?? [];
+        const current = prev[activePlaylistName] ?? [];
         const newPlaylists = { ...prev };
-        if (currentList.includes(shotId)) {
-            newPlaylists[activePlaylistName] = currentList.filter(id => id !== shotId);
+        if (current.includes(shotId)) {
+            newPlaylists[activePlaylistName] = current.filter(id => id !== shotId);
         } else {
-            newPlaylists[activePlaylistName] = [...currentList, shotId];
+            newPlaylists[activePlaylistName] = [...current, shotId];
         }
         return newPlaylists;
     });
-  }, [activePlaylistName]);
+  }, [activePlaylistName, playlists]);
 
-  const handleCreatePlaylist = () => {
+  const handleCreatePlaylist = async () => {
     const name = newPlaylistName.trim();
     if (name && !playlists[name]) {
+      await apiCreatePlaylist(name);
       setPlaylists(prev => ({ ...prev, [name]: [] }));
       setActivePlaylistName(name);
       setNewPlaylistName('');
@@ -258,8 +289,10 @@ const App: React.FC = () => {
     }
   };
 
-  const handleDeletePlaylist = (nameToDelete: string) => {
+  const handleDeletePlaylist = async (nameToDelete: string) => {
     if (!window.confirm(`آیا از حذف لیست پخش «${nameToDelete}» مطمئن هستید؟`)) return;
+
+    await apiDeletePlaylist(nameToDelete);
 
     setPlaylists(prev => {
         const newPlaylists = { ...prev };
@@ -273,12 +306,13 @@ const App: React.FC = () => {
     }
   };
   
-  const handleSaveRenamePlaylist = () => {
+  const handleSaveRenamePlaylist = async () => {
     if (!renamingPlaylist) return;
     const { oldName, newName } = renamingPlaylist;
     const trimmedNewName = newName.trim();
 
     if (trimmedNewName && trimmedNewName !== oldName && !playlists[trimmedNewName]) {
+        await apiRenamePlaylist(oldName, trimmedNewName);
         setPlaylists(prev => {
             const newPlaylists = { ...prev };
             newPlaylists[trimmedNewName] = newPlaylists[oldName];
@@ -334,28 +368,30 @@ const App: React.FC = () => {
     reader.readAsText(file);
   };
   
-  const handleAddTag = useCallback((shotId: string, tag: string) => {
+  const handleAddTag = useCallback(async (shotId: string, tag: string) => {
     const cleanTag = tag.trim();
     if (!cleanTag) return;
+    const currentTags = tags[shotId] || [];
+
+    if (currentTags.length >= 20) {
+        alert("حداکثر 20 تگ برای هر مورد مجاز است.");
+        return;
+    }
+
+    if (currentTags.map(t => t.toLowerCase()).includes(cleanTag.toLowerCase())) {
+        alert(`تگ «${cleanTag}» از قبل برای این مورد وجود دارد.`);
+        return;
+    }
+
+    await apiAddTag(shotId, cleanTag);
     setTags(prev => {
-        const currentTags = prev[shotId] || [];
-        
-        if (currentTags.length >= 20) {
-            alert("حداکثر 20 تگ برای هر مورد مجاز است.");
-            return prev;
-        }
-
-        if (currentTags.map(t => t.toLowerCase()).includes(cleanTag.toLowerCase())) {
-            alert(`تگ «${cleanTag}» از قبل برای این مورد وجود دارد.`);
-            return prev;
-        }
-
-        const newTagsForShot = [...currentTags, cleanTag].sort();
+        const newTagsForShot = [...(prev[shotId] || []), cleanTag].sort();
         return { ...prev, [shotId]: newTagsForShot };
     });
-  }, []);
+  }, [tags]);
 
-  const handleRemoveTag = useCallback((shotId: string, tagToRemove: string) => {
+  const handleRemoveTag = useCallback(async (shotId: string, tagToRemove: string) => {
+    await apiRemoveTag(shotId, tagToRemove);
     setTags(prev => {
       const newTags = (prev[shotId] || []).filter(t => t !== tagToRemove);
       const newTagsState = { ...prev };
@@ -368,10 +404,11 @@ const App: React.FC = () => {
     });
   }, []);
   
-  const handleRenameTag = useCallback((oldTag: string, newTag: string) => {
+  const handleRenameTag = useCallback(async (oldTag: string, newTag: string) => {
     const cleanedNewTag = newTag.trim();
     if (!cleanedNewTag || oldTag.toLowerCase() === cleanedNewTag.toLowerCase()) return;
 
+    await apiRenameTag(oldTag, cleanedNewTag);
     setTags(prevTags => {
       const newGlobalTags: Tags = {};
       for (const shotId in prevTags) {
@@ -380,7 +417,7 @@ const App: React.FC = () => {
 
         if (oldTagIndex !== -1) {
           const newTagExists = shotTags.some((t, i) => i !== oldTagIndex && t.toLowerCase() === cleanedNewTag.toLowerCase());
-          
+
           if (newTagExists) {
             newGlobalTags[shotId] = shotTags.filter(t => t.toLowerCase() !== oldTag.toLowerCase());
           } else {
