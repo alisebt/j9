@@ -14,7 +14,8 @@ import {
   removeShotFromPlaylist,
   addTag as apiAddTag,
   removeTag as apiRemoveTag,
-  renameTag as apiRenameTag
+  renameTag as apiRenameTag,
+  saveDirectory
 } from './api';
 
 // Augment React's HTMLAttributes to include non-standard directory attributes
@@ -120,6 +121,14 @@ const App: React.FC = () => {
   const handleFilesSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
+    const rootDir = (files[0] as any).webkitRelativePath?.split('/')[0];
+    if (rootDir) {
+      try {
+        await saveDirectory(rootDir);
+      } catch (err) {
+        console.error('Failed to save directory', err);
+      }
+    }
 
     setIsLoading(true);
     setError(null);

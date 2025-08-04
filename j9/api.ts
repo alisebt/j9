@@ -67,3 +67,17 @@ export async function renameTag(oldTag: string, newTag: string) {
     body: JSON.stringify({ oldTag, newTag })
   });
 }
+
+export async function fetchDirectories(): Promise<string[]> {
+  const res = await fetch(`${API_BASE}/directories`);
+  if (!res.ok) throw new Error('Failed to fetch directories');
+  return res.json();
+}
+
+export async function saveDirectory(path: string) {
+  await fetch(`${API_BASE}/directories`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ path })
+  });
+}
