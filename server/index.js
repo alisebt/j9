@@ -25,6 +25,12 @@ const playlistSchema = new mongoose.Schema({
 });
 const Playlist = mongoose.model('Playlist', playlistSchema);
 
+// Directory model
+const directorySchema = new mongoose.Schema({
+  path: { type: String, required: true, unique: true }
+});
+const Directory = mongoose.model('Directory', directorySchema);
+
 // Tag routes
 app.get('/api/tags', async (req, res) => {
   const tags = await Tag.find();
@@ -116,6 +122,25 @@ app.delete('/api/playlists/:name/shots/:shotId', async (req, res) => {
   );
   if (!playlist) return res.status(404).json({ error: 'Playlist not found' });
   res.json(playlist);
+});
+
+// Directory routes
+app.get('/api/directories', async (req, res) => {
+  const dirs = await Directory.find();
+  res.json(dirs.map(d => d.path));
+});
+
+app.post('/api/directories', async (req, res) => {
+  const { path } = req.body;
+  if (!path) return res.status(400).json({ error: 'Path required' });
+  try {
+    const dir = new Directory({ path });
+    await dir.save();
+    res.json(dir);
+  } catch (e) {
+    if (e.code === 11000) return res.status(409).json({ error: 'Directory already exists' });
+    res.status(500).json({ error: 'Failed to save directory' });
+  }
 });
 
 const PORT = 3001;
