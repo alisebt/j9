@@ -121,14 +121,6 @@ const App: React.FC = () => {
   const handleFilesSelected = async (event: React.ChangeEvent<HTMLInputElement>) => {
     const files = event.target.files;
     if (!files || files.length === 0) return;
-    const rootDir = (files[0] as any).webkitRelativePath?.split('/')[0];
-    if (rootDir) {
-      try {
-        await saveDirectory(rootDir);
-      } catch (err) {
-        console.error('Failed to save directory', err);
-      }
-    }
 
     setIsLoading(true);
     setError(null);
@@ -216,8 +208,26 @@ const App: React.FC = () => {
       if (event.target) event.target.value = '';
     }
   };
-  
-  const handleSelectDirectoryClick = () => fileInputRef.current?.click();
+
+  const handleSaveDirectory = useCallback(async (event: Event) => {
+    const input = event.target as HTMLInputElement;
+    const files = input.files;
+    if (!files || files.length === 0) return;
+    const rootDir = (files[0] as any).webkitRelativePath?.split('/')[0];
+    if (!rootDir) return;
+    try {
+      await saveDirectory(rootDir);
+    } catch (err) {
+      console.error('Failed to save directory', err);
+    }
+  }, []);
+
+  const handleSelectDirectoryClick = () => {
+    if (!fileInputRef.current) return;
+    fileInputRef.current.removeEventListener('change', handleSaveDirectory);
+    fileInputRef.current.addEventListener('change', handleSaveDirectory, { once: true });
+    fileInputRef.current.click();
+  };
   const handleImportPlaylistsClick = () => importPlaylistsInputRef.current?.click();
   const handleImportTagsClick = () => importTagsInputRef.current?.click();
   
