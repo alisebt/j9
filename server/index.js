@@ -8,10 +8,8 @@ app.use(cors());
 app.use(express.json());
 
 // اتصال به MongoDB Atlas
-mongoose.connect('mongodb+srv://rtsharebox:JVDD5dELVrah8wY9@cluster0.jqrnlot.mongodb.net/?retryWrites=true&w=majority&appName=Cluster0', {
-  useNewUrlParser: true,
-  useUnifiedTopology: true,
-});
+mongoose.connect('mongodb://127.0.0.1:27017/J9', { useNewUrlParser: true, useUnifiedTopology: true });
+
 
 // Tag model
 const tagSchema = new mongoose.Schema({
